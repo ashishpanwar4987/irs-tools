@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRS Survey Allocation Tracker</title>
+<!-- Export Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0e14;
+    --surface: #111620;
+    --surface2: #181f2e;
+    --border: #1e2d45;
+    --accent: #00c8ff;
+    --accent2: #ff6b35;
+    --green: #00e5a0;
+    --yellow: #ffd166;
+    --red: #ff4757;
+    --text: #d0dbe8;
+    --text-muted: #5a7a99;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    font-size: 13px;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo-badge {
+    background: var(--accent);
+    color: #000;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+  .header-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .header-stats { display: flex; gap: 24px; }
+  .stat { text-align: right; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--accent); font-family: var(--font-display); }
+  .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 65px); }
+
+  /* Left Panel */
+  .left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); font-weight: 600; }
+  .panel-body { padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Email Parser */
+  .email-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    width: 100%;
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.6;
+    transition: border-color 0.2s;
+  }
+  .email-input:focus { outline: none; border-color: var(--accent); }
+  .email-input::placeholder { color: var(--text-muted); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #33d6ff; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+  .btn-danger:hover { background: var(--red); color: #fff; }
+  .btn-sm { padding: 5px 10px; font-size: 10px; }
+  .btn-full { width: 100%; }
+
+  /* Parse Result Preview */
+  .parse-preview {
+    background: var(--bg);
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    padding: 12px;
+    display: none;
+  }
+  .parse-preview.show { display: block; }
+  .parse-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .parse-row:last-child { border-bottom: none; }
+  .parse-key { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .parse-val { color: var(--accent); font-size: 11px; font-weight: 600; max-width: 160px; text-align: right; word-break: break-word; }
+  .parse-title { color: var(--green); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; font-weight: 700; }
+
+  /* Surveyor selector in preview */
+  .surveyor-select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .surveyor-select:focus { outline: none; border-color: var(--accent); }
+
+  /* Right Panel - Tracker */
+  .right-panel { display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar {
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .filter-btn.active, .filter-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,200,255,0.08); }
+  .search-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 4px;
+    width: 180px;
+    margin-left: auto;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Tracker Table */
+  .tracker-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .tracker-table { width: 100%; border-collapse: collapse; }
+  .tracker-table th {
+    text-align: left;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    padding: 0 10px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .tracker-table td {
+    padding: 10px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    vertical-align: middle;
+    font-size: 12px;
+  }
+  .tracker-table tr:hover td { background: rgba(0,200,255,0.03); }
+
+  .vessel-name { font-weight: 700; color: #fff; font-size: 13px; }
+  .vessel-type { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .badge-wyc { background: rgba(0,229,160,0.15); color: var(--green); border: 1px solid rgba(0,229,160,0.3); }
+  .badge-chma { background: rgba(255,209,102,0.15); color: var(--yellow); border: 1px solid rgba(255,209,102,0.3); }
+  .badge-ap { background: rgba(0,200,255,0.15); color: var(--accent); border: 1px solid rgba(0,200,255,0.3); }
+  .badge-unassigned { background: rgba(90,122,153,0.15); color: var(--text-muted); border: 1px solid rgba(90,122,153,0.3); }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .status-confirmed { background: rgba(0,229,160,0.1); color: var(--green); }
+  .status-confirmed .status-dot { background: var(--green); }
+  .status-pending { background: rgba(255,209,102,0.1); color: var(--yellow); }
+  .status-pending .status-dot { background: var(--yellow); }
+  .status-completed { background: rgba(90,122,153,0.1); color: var(--text-muted); }
+  .status-completed .status-dot { background: var(--text-muted); }
+  .status-rescheduled { background: rgba(255,107,53,0.1); color: var(--accent2); }
+  .status-rescheduled .status-dot { background: var(--accent2); }
+
+  .survey-type { font-size: 11px; color: var(--text); }
+  .eta-date { font-size: 12px; color: #fff; font-weight: 600; }
+  .eta-port { font-size: 10px; color: var(--text-muted); }
+  .days-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .days-urgent { background: rgba(255,71,87,0.2); color: var(--red); }
+  .days-soon { background: rgba(255,209,102,0.2); color: var(--yellow); }
+  .days-ok { background: rgba(0,229,160,0.1); color: var(--green); }
+  .days-past { background: rgba(90,122,153,0.1); color: var(--text-muted); }
+
+  .action-btns { display: flex; gap: 5px; }
+
+  /* Inline edit */
+  .editable {
+    background: transparent;
+    border: 1px solid transparent;
+    color: inherit;
+    font-family: var(--font-mono);
+    font-size: inherit;
+    padding: 2px 4px;
+    border-radius: 3px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .editable:hover { border-color: var(--border); }
+  .editable:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { font-family: var(--font-display); font-size: 16px; color: var(--text); margin-bottom: 6px; }
+  .empty-sub { font-size: 11px; line-height: 1.6; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; display: none;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    width: 420px;
+    max-width: 95vw;
+  }
+  .modal-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 16px; }
+  .form-group { margin-bottom: 12px; }
+  .form-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 5px; display: block; }
+  .form-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: 4px;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--green);
+    color: var(--green);
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 2000;
+    transform: translateY(100px);
+    transition: transform 0.3s ease;
+  }
+  .toast.show { transform: translateY(0); }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(0,200,255,0.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Calendar view toggle */
+  .view-tabs { display: flex; gap: 1px; background: var(--bg); border-radius: 5px; padding: 2px; margin-left: auto; }
+  .view-tab {
+    padding: 4px 12px; border-radius: 4px; border: none; background: transparent;
+    color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  .view-tab.active { background: var(--surface2); color: var(--accent); }
+
+  /* Export modal */
+  .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .export-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    background: var(--bg);
+  }
+  .export-card:hover { border-color: var(--accent); background: rgba(0,200,255,0.04); }
+  .export-card.selected { border-color: var(--accent); background: rgba(0,200,255,0.08); }
+  .export-icon { font-size: 28px; margin-bottom: 6px; }
+  .export-label { font-size: 12px; font-weight: 700; color: #fff; }
+  .export-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+  .month-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.4s; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Notes cell */
+  .notes-text { font-size: 10px; color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo-badge">IRS</span>
+    <div>
+      <div class="header-title">Survey Allocation Tracker · SEA Region</div>
+      <div class="header-sub">Singapore · Malaysia · Thailand · Philippines</div>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat"><div class="stat-val" id="stat-total">0</div><div class="stat-label">Total</div></div>
+    <div class="stat"><div class="stat-val" id="stat-pending" style="color:var(--yellow)">0</div><div class="stat-label">Pending</div></div>
+    <div class="stat"><div class="stat-val" id="stat-this-week" style="color:var(--accent2)">0</div><div class="stat-label">This Week</div></div>
+    <div class="stat"><div class="stat-val" id="stat-confirmed" style="color:var(--green)">0</div><div class="stat-label">Confirmed</div></div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- LEFT: Email Parser -->
+  <div class="left-panel">
+    <div class="panel-header">
+      <span class="panel-title">📧 Email → Survey Parser</span>
+    </div>
+    <div class="panel-body">
+      <div style="font-size:10px; color:var(--text-muted); line-height:1.6; padding:8px; background:var(--bg); border-radius:5px; border:1px solid var(--border)">
+        <span style="color:var(--accent); font-weight:700">HOW TO USE:</span><br>
+        1. Forward email to yourself<br>
+        2. Copy the full email text<br>
+        3. Paste below → AI extracts details<br>
+        4. Assign surveyor → Add to tracker
+      </div>
+
+      <textarea class="email-input" id="emailInput" placeholder="Paste forwarded email here...
+
+Examples that work well:
+• Vessel schedule notifications
+• Survey request emails from owners/operators
+• Port agent notices with ETA info
+• Class renewal reminders"></textarea>
+
+      <button class="btn btn-primary btn-full" id="parseBtn" onclick="parseEmail()">
+        <span id="parseBtnText">⚡ Parse with AI</span>
+      </button>
+
+      <!-- Preview of parsed data -->
+      <div class="parse-preview" id="parsePreview">
+        <div class="parse-title">✓ Extracted Data</div>
+        <div id="parseRows"></div>
+        <div style="margin-top:10px">
+          <label class="form-label">Assign Surveyor</label>
+          <select class="surveyor-select" id="surveyorSelect" style="width:100%">
+            <option value="WYC">WYC</option>
+            <option value="CHMA">CHMA</option>
+            <option value="AP (Self)">AP (Self)</option>
+            <option value="Unassigned">Unassigned</option>
+          </select>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px;">
+          <button class="btn btn-primary" style="flex:1" onclick="addParsedEntry()">+ Add to Tracker</button>
+          <button class="btn btn-secondary" onclick="clearParse()">✕</button>
+        </div>
+      </div>
+
+      <!-- Manual Add -->
+      <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px;">
+        <div class="panel-title" style="margin-bottom:10px">+ Manual Entry</div>
+        <button class="btn btn-secondary btn-full" onclick="openManualModal()">Add Survey Manually</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Tracker -->
+  <div class="right-panel">
+    <div class="toolbar">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
+      <button class="filter-btn" onclick="setFilter('confirmed', this)">Confirmed</button>
+      <button class="filter-btn" onclick="setFilter('rescheduled', this)">Rescheduled</button>
+      <button class="filter-btn" onclick="setFilter('completed', this)">Completed</button>
+      <button class="filter-btn" onclick="setFilter('wyc', this)">WYC</button>
+      <button class="filter-btn" onclick="setFilter('chma', this)">CHMA</button>
+      <button class="filter-btn" onclick="setFilter('ap', this)">AP (Self)</button>
+      <input type="text" class="search-input" placeholder="Search vessel..." oninput="filterSearch(this.value)" />
+      <button class="btn btn-secondary btn-sm" onclick="openExportModal()" style="margin-left:8px; border-color:var(--accent2); color:var(--accent2)">⬇ Export</button>
+    </div>
+
+    <div class="tracker-scroll">
+      <table class="tracker-table">
+        <thead>
+          <tr>
+            <th>VESSEL</th>
+            <th>ETA / PORT</th>
+            <th>SURVEY TYPE</th>
+            <th>SURVEYOR</th>
+            <th>STATUS</th>
+            <th>DAYS</th>
+            <th>NOTES</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="trackerBody">
+        </tbody>
+      </table>
+      <div id="emptyState" class="empty-state" style="display:none">
+        <div class="empty-icon">⚓</div>
+        <div class="empty-title">No surveys tracked yet</div>
+        <div class="empty-sub">Paste an email in the left panel to auto-extract vessel details,<br>or add entries manually.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Add Modal -->
+<div class="modal-overlay" id="manualModal">
+  <div class="modal">
+    <div class="modal-title">Add Survey Entry</div>
+    <div class="form-group">
+      <label class="form-label">Vessel Name *</label>
+      <input class="form-input" id="m-vessel" placeholder="MV / MT / LPG / LNG ...">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">Vessel Type</label>
+        <input class="form-input" id="m-type" placeholder="Bulk Carrier, Tanker...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">IMO Number</label>
+        <input class="form-input" id="m-imo" placeholder="9xxxxxxx">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">ETA Date *</label>
+        <input class="form-input" id="m-eta" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Port</label>
+        <input class="form-input" id="m-port" placeholder="Singapore, PTP...">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Survey Type *</label>
+      <input class="form-input" id="m-survey" placeholder="Annual, ISM Audit, DOC Renewal, MLC...">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">Surveyor</label>
+        <select class="form-input" id="m-surveyor">
+          <option>WYC</option>
+          <option>CHMA</option>
+          <option>AP (Self)</option>
+          <option>Unassigned</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-input" id="m-status">
+          <option>Pending</option>
+          <option>Confirmed</option>
+          <option>Rescheduled</option>
+          <option>Completed</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="m-notes" placeholder="Owner contact, special requirements...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeManualModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="addManualEntry()">Add Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-title">Edit Survey Entry</div>
+    <input type="hidden" id="e-id">
+    <div class="form-group">
+      <label class="form-label">Vessel Name</label>
+      <input class="form-input" id="e-vessel">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">Vessel Type</label>
+        <input class="form-input" id="e-type">
+      </div>
+      <div class="form-group">
+        <label class="form-label">IMO Number</label>
+        <input class="form-input" id="e-imo">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">ETA Date</label>
+        <input class="form-input" id="e-eta" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Port</label>
+        <input class="form-input" id="e-port">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Survey Type</label>
+      <input class="form-input" id="e-survey">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label class="form-label">Surveyor</label>
+        <select class="form-input" id="e-surveyor">
+          <option>WYC</option>
+          <option>CHMA</option>
+          <option>AP (Self)</option>
+          <option>Unassigned</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-input" id="e-status">
+          <option>Pending</option>
+          <option>Confirmed</option>
+          <option>Rescheduled</option>
+          <option>Completed</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="e-notes">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-title">📊 Export Monthly Report</div>
+    <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px">Select format and month range to export survey allocation data.</p>
+
+    <div style="margin-bottom:14px">
+      <label class="form-label">Export Format</label>
+      <div class="export-grid">
+        <div class="export-card selected" id="card-excel" onclick="selectFormat('excel')">
+          <div class="export-icon">📗</div>
+          <div class="export-label">Excel (.xlsx)</div>
+          <div class="export-sub">2 sheets: Data + Summary</div>
+        </div>
+        <div class="export-card" id="card-pdf" onclick="selectFormat('pdf')">
+          <div class="export-icon">📄</div>
+          <div class="export-label">PDF Report</div>
+          <div class="export-sub">Formatted table + stats</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="month-row" style="margin-bottom:14px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Month</label>
+        <select class="form-input" id="exp-month">
+          <option value="0">January</option><option value="1">February</option>
+          <option value="2">March</option><option value="3">April</option>
+          <option value="4">May</option><option value="5">June</option>
+          <option value="6">July</option><option value="7">August</option>
+          <option value="8">September</option><option value="9">October</option>
+          <option value="10">November</option><option value="11">December</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Year</label>
+        <select class="form-input" id="exp-year"></select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Include Surveys</label>
+      <select class="form-input" id="exp-scope">
+        <option value="month">Selected month only (ETA in month)</option>
+        <option value="all">All surveys (full tracker dump)</option>
+      </select>
+    </div>
+
+    <div class="progress-bar" id="expProgress" style="display:none"><div class="progress-fill" id="expFill"></div></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeExportModal()">Cancel</button>
+      <button class="btn btn-primary" id="expBtn" onclick="runExport()">⬇ Download Report</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────
+let surveys = JSON.parse(localStorage.getItem('irs_surveys') || '[]');
+let parsedData = null;
+let currentFilter = 'all';
+let searchQuery = '';
+
+// ─── AI Email Parsing ─────────────────────────────────────
+async function parseEmail() {
+  const emailText = document.getElementById('emailInput').value.trim();
+  if (!emailText) { showToast('Paste email text first', 'error'); return; }
+
+  const btn = document.getElementById('parseBtn');
+  const btnText = document.getElementById('parseBtnText');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span> Parsing...';
+
+  const prompt = `You are an expert maritime document parser for a classification society (Indian Register of Shipping).
+
+Extract survey/vessel information from the following email text. Return ONLY a valid JSON object with these fields:
+{
+  "vesselName": "full vessel name or null",
+  "vesselType": "type like Bulk Carrier / Container / Tanker / General Cargo / LPG / LNG / Chemical Tanker / RORO / OSV etc, or null",
+  "imoNumber": "IMO number digits only or null",
+  "eta": "date in YYYY-MM-DD format or null",
+  "port": "port name or null",
+  "surveyType": "specific survey type e.g. Annual Survey, ISM Audit, DOC Renewal, MLC Inspection, ISPS Audit, Class Renewal, Intermediate Survey, Special Survey, Docking Survey, or null",
+  "ownerOperator": "owner or operator name or null",
+  "notes": "any special requirements or additional relevant info or null",
+  "confidence": "high / medium / low"
+}
+
+Do not include any explanation. Return only the JSON.
+
+Email text:
+${emailText}`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const rawText = data.content[0].text.trim();
+    const clean = rawText.replace(/```json|```/g, '').trim();
+    parsedData = JSON.parse(clean);
+
+    showParsePreview(parsedData);
+    showToast('Email parsed successfully');
+  } catch (err) {
+    showToast('Parse error — check email text', 'error');
+    console.error(err);
+  }
+
+  btn.disabled = false;
+  btnText.innerHTML = '⚡ Parse with AI';
+}
+
+function showParsePreview(data) {
+  const fields = [
+    ['Vessel', data.vesselName],
+    ['Type', data.vesselType],
+    ['IMO', data.imoNumber],
+    ['ETA', data.eta],
+    ['Port', data.port],
+    ['Survey', data.surveyType],
+    ['Owner/Op', data.ownerOperator],
+    ['Confidence', data.confidence],
+  ];
+
+  const rowsHTML = fields
+    .filter(([, v]) => v && v !== 'null')
+    .map(([k, v]) => `
+      <div class="parse-row">
+        <span class="parse-key">${k}</span>
+        <span class="parse-val">${v}</span>
+      </div>`).join('');
+
+  document.getElementById('parseRows').innerHTML = rowsHTML;
+  document.getElementById('parsePreview').classList.add('show');
+}
+
+function clearParse() {
+  parsedData = null;
+  document.getElementById('parsePreview').classList.remove('show');
+  document.getElementById('emailInput').value = '';
+}
+
+function addParsedEntry() {
+  if (!parsedData) return;
+  const surveyor = document.getElementById('surveyorSelect').value;
+
+  const entry = {
+    id: Date.now().toString(),
+    vesselName: parsedData.vesselName || 'Unknown Vessel',
+    vesselType: parsedData.vesselType || '',
+    imoNumber: parsedData.imoNumber || '',
+    eta: parsedData.eta || '',
+    port: parsedData.port || '',
+    surveyType: parsedData.surveyType || '',
+    surveyor: surveyor,
+    status: 'Pending',
+    notes: [parsedData.ownerOperator ? `Op: ${parsedData.ownerOperator}` : '', parsedData.notes || ''].filter(Boolean).join(' | '),
+    createdAt: new Date().toISOString()
+  };
+
+  surveys.unshift(entry);
+  save();
+  renderTable();
+  clearParse();
+  showToast(`${entry.vesselName} added to tracker`);
+}
+
+// ─── Manual Entry ─────────────────────────────────────────
+function openManualModal() {
+  document.getElementById('m-eta').value = new Date().toISOString().split('T')[0];
+  document.getElementById('manualModal').classList.add('show');
+}
+function closeManualModal() { document.getElementById('manualModal').classList.remove('show'); }
+
+function addManualEntry() {
+  const vessel = document.getElementById('m-vessel').value.trim();
+  if (!vessel) { showToast('Vessel name required', 'error'); return; }
+
+  const entry = {
+    id: Date.now().toString(),
+    vesselName: vessel,
+    vesselType: document.getElementById('m-type').value.trim(),
+    imoNumber: document.getElementById('m-imo').value.trim(),
+    eta: document.getElementById('m-eta').value,
+    port: document.getElementById('m-port').value.trim(),
+    surveyType: document.getElementById('m-survey').value.trim(),
+    surveyor: document.getElementById('m-surveyor').value,
+    status: document.getElementById('m-status').value,
+    notes: document.getElementById('m-notes').value.trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  surveys.unshift(entry);
+  save();
+  renderTable();
+  closeManualModal();
+  showToast(`${entry.vesselName} added`);
+
+  ['m-vessel','m-type','m-imo','m-port','m-survey','m-notes'].forEach(id => document.getElementById(id).value = '');
+}
+
+// ─── Edit Entry ───────────────────────────────────────────
+function openEdit(id) {
+  const e = surveys.find(s => s.id === id);
+  if (!e) return;
+  document.getElementById('e-id').value = id;
+  document.getElementById('e-vessel').value = e.vesselName;
+  document.getElementById('e-type').value = e.vesselType || '';
+  document.getElementById('e-imo').value = e.imoNumber || '';
+  document.getElementById('e-eta').value = e.eta || '';
+  document.getElementById('e-port').value = e.port || '';
+  document.getElementById('e-survey').value = e.surveyType || '';
+  document.getElementById('e-surveyor').value = e.surveyor;
+  document.getElementById('e-status').value = e.status;
+  document.getElementById('e-notes').value = e.notes || '';
+  document.getElementById('editModal').classList.add('show');
+}
+function closeEditModal() { document.getElementById('editModal').classList.remove('show'); }
+
+function saveEdit() {
+  const id = document.getElementById('e-id').value;
+  const idx = surveys.findIndex(s => s.id === id);
+  if (idx === -1) return;
+  surveys[idx] = {
+    ...surveys[idx],
+    vesselName: document.getElementById('e-vessel').value.trim(),
+    vesselType: document.getElementById('e-type').value.trim(),
+    imoNumber: document.getElementById('e-imo').value.trim(),
+    eta: document.getElementById('e-eta').value,
+    port: document.getElementById('e-port').value.trim(),
+    surveyType: document.getElementById('e-survey').value.trim(),
+    surveyor: document.getElementById('e-surveyor').value,
+    status: document.getElementById('e-status').value,
+    notes: document.getElementById('e-notes').value.trim(),
+  };
+  save();
+  renderTable();
+  closeEditModal();
+  showToast('Entry updated');
+}
+
+function deleteEntry(id) {
+  if (!confirm('Delete this survey entry?')) return;
+  surveys = surveys.filter(s => s.id !== id);
+  save();
+  renderTable();
+  showToast('Entry deleted', 'error');
+}
+
+// ─── Filters ─────────────────────────────────────────────
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function filterSearch(q) {
+  searchQuery = q.toLowerCase();
+  renderTable();
+}
+
+function getFiltered() {
+  return surveys.filter(s => {
+    const matchSearch = !searchQuery ||
+      s.vesselName.toLowerCase().includes(searchQuery) ||
+      (s.port || '').toLowerCase().includes(searchQuery) ||
+      (s.surveyType || '').toLowerCase().includes(searchQuery);
+
+    const f = currentFilter;
+    const matchFilter =
+      f === 'all' ? true :
+      f === 'wyc' ? s.surveyor === 'WYC' :
+      f === 'chma' ? s.surveyor === 'CHMA' :
+      f === 'ap' ? s.surveyor === 'AP (Self)' :
+      s.status.toLowerCase() === f;
+
+    return matchSearch && matchFilter;
+  });
+}
+
+// ─── Render ───────────────────────────────────────────────
+function getDaysTag(eta) {
+  if (!eta) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(eta); d.setHours(0,0,0,0);
+  const diff = Math.round((d - today) / 86400000);
+  if (diff < 0) return `<span class="days-tag days-past">${Math.abs(diff)}d ago</span>`;
+  if (diff === 0) return `<span class="days-tag days-urgent">TODAY</span>`;
+  if (diff <= 3) return `<span class="days-tag days-urgent">${diff}d</span>`;
+  if (diff <= 7) return `<span class="days-tag days-soon">${diff}d</span>`;
+  return `<span class="days-tag days-ok">${diff}d</span>`;
+}
+
+function surveyorBadge(s) {
+  const cls = s === 'WYC' ? 'badge-wyc' : s === 'CHMA' ? 'badge-chma' : s === 'AP (Self)' ? 'badge-ap' : 'badge-unassigned';
+  return `<span class="badge ${cls}">${s}</span>`;
+}
+
+function statusBadge(s) {
+  const cls = s === 'Confirmed' ? 'status-confirmed' : s === 'Pending' ? 'status-pending' : s === 'Rescheduled' ? 'status-rescheduled' : 'status-completed';
+  return `<span class="status-badge ${cls}"><span class="status-dot"></span>${s}</span>`;
+}
+
+function renderTable() {
+  const list = getFiltered();
+  const tbody = document.getElementById('trackerBody');
+  const empty = document.getElementById('emptyState');
+
+  if (list.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    tbody.innerHTML = list.map(s => `
+      <tr>
+        <td>
+          <div class="vessel-name">${s.vesselName}</div>
+          <div class="vessel-type">${[s.vesselType, s.imoNumber ? `IMO ${s.imoNumber}` : ''].filter(Boolean).join(' · ')}</div>
+        </td>
+        <td>
+          <div class="eta-date">${s.eta ? new Date(s.eta + 'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'}</div>
+          <div class="eta-port">${s.port || '—'}</div>
+        </td>
+        <td><span class="survey-type">${s.surveyType || '—'}</span></td>
+        <td>${surveyorBadge(s.surveyor)}</td>
+        <td>${statusBadge(s.status)}</td>
+        <td>${getDaysTag(s.eta)}</td>
+        <td><div class="notes-text" title="${s.notes || ''}">${s.notes || '—'}</div></td>
+        <td>
+          <div class="action-btns">
+            <button class="btn btn-secondary btn-sm" onclick="openEdit('${s.id}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteEntry('${s.id}')">✕</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  updateStats();
+}
+
+function updateStats() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
+
+  document.getElementById('stat-total').textContent = surveys.length;
+  document.getElementById('stat-pending').textContent = surveys.filter(s => s.status === 'Pending').length;
+  document.getElementById('stat-confirmed').textContent = surveys.filter(s => s.status === 'Confirmed').length;
+  document.getElementById('stat-this-week').textContent = surveys.filter(s => {
+    if (!s.eta) return false;
+    const d = new Date(s.eta + 'T00:00:00');
+    return d >= today && d <= weekEnd;
+  }).length;
+}
+
+// ─── Persist & Toast ──────────────────────────────────────
+function save() { localStorage.setItem('irs_surveys', JSON.stringify(surveys)); }
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = type === 'error' ? 'var(--red)' : 'var(--green)';
+  t.style.color = type === 'error' ? 'var(--red)' : 'var(--green)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── Export ───────────────────────────────────────────────
+let exportFormat = 'excel';
+
+function openExportModal() {
+  // Populate year dropdown
+  const yearSel = document.getElementById('exp-year');
+  yearSel.innerHTML = '';
+  const now = new Date();
+  for (let y = now.getFullYear() + 1; y >= 2024; y--) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  document.getElementById('exp-month').value = now.getMonth();
+  document.getElementById('exportModal').classList.add('show');
+}
+function closeExportModal() { document.getElementById('exportModal').classList.remove('show'); }
+function selectFormat(fmt) {
+  exportFormat = fmt;
+  document.getElementById('card-excel').classList.toggle('selected', fmt === 'excel');
+  document.getElementById('card-pdf').classList.toggle('selected', fmt === 'pdf');
+}
+
+function getExportData() {
+  const scope = document.getElementById('exp-scope').value;
+  const month = parseInt(document.getElementById('exp-month').value);
+  const year = parseInt(document.getElementById('exp-year').value);
+  if (scope === 'all') return surveys;
+  return surveys.filter(s => {
+    if (!s.eta) return false;
+    const d = new Date(s.eta + 'T00:00:00');
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
+
+function getMonthLabel() {
+  const month = parseInt(document.getElementById('exp-month').value);
+  const year = document.getElementById('exp-year').value;
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${names[month]} ${year}`;
+}
+
+function setProgress(pct) {
+  document.getElementById('expProgress').style.display = 'block';
+  document.getElementById('expFill').style.width = pct + '%';
+}
+
+async function runExport() {
+  const data = getExportData();
+  if (data.length === 0) { showToast('No data for selected period', 'error'); return; }
+  document.getElementById('expBtn').disabled = true;
+  setProgress(20);
+
+  try {
+    if (exportFormat === 'excel') await exportExcel(data);
+    else await exportPDF(data);
+    setProgress(100);
+    setTimeout(() => {
+      document.getElementById('expProgress').style.display = 'none';
+      document.getElementById('expFill').style.width = '0%';
+      document.getElementById('expBtn').disabled = false;
+      closeExportModal();
+      showToast('Report downloaded successfully');
+    }, 600);
+  } catch(e) {
+    showToast('Export failed: ' + e.message, 'error');
+    document.getElementById('expBtn').disabled = false;
+    document.getElementById('expProgress').style.display = 'none';
+  }
+}
+
+async function exportExcel(data) {
+  setProgress(40);
+  const wb = XLSX.utils.book_new();
+  const monthLabel = getMonthLabel();
+
+  // ── Sheet 1: Survey Data ──
+  const headers = ['Vessel Name','Vessel Type','IMO Number','ETA Date','Port','Survey Type','Surveyor','Status','Notes'];
+  const rows = data.map(s => [
+    s.vesselName, s.vesselType || '', s.imoNumber || '',
+    formatDate(s.eta), s.port || '', s.surveyType || '',
+    s.surveyor, s.status, s.notes || ''
+  ]);
+  const wsData = [headers, ...rows];
+  const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws1['!cols'] = [22,16,12,14,16,22,12,13,30].map(w => ({wch: w}));
+
+  // Header row style
+  headers.forEach((_, i) => {
+    const cellRef = XLSX.utils.encode_cell({r:0, c:i});
+    if (!ws1[cellRef]) return;
+    ws1[cellRef].s = { font: {bold: true, color: {rgb: 'FFFFFF'}}, fill: {fgColor: {rgb: '0A3D62'}}, alignment: {horizontal: 'center'} };
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws1, 'Survey Data');
+  setProgress(65);
+
+  // ── Sheet 2: Summary ──
+  const surveyors = ['WYC','CHMA','AP (Self)','Unassigned'];
+  const statuses  = ['Pending','Confirmed','Rescheduled','Completed'];
+
+  const sumRows = [
+    [`IRS SEA Region — Survey Allocation Report`],
+    [`Period: ${monthLabel}`],
+    [`Generated: ${new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'})}`],
+    [],
+    ['SURVEYOR SUMMARY','',''],
+    ['Surveyor','Count','%'],
+    ...surveyors.map(sv => {
+      const cnt = data.filter(s => s.surveyor === sv).length;
+      return [sv, cnt, data.length ? Math.round(cnt/data.length*100)+'%' : '0%'];
+    }),
+    [],
+    ['STATUS SUMMARY','',''],
+    ['Status','Count','%'],
+    ...statuses.map(st => {
+      const cnt = data.filter(s => s.status === st).length;
+      return [st, cnt, data.length ? Math.round(cnt/data.length*100)+'%' : '0%'];
+    }),
+    [],
+    ['TOTAL SURVEYS', data.length, ''],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws2['!cols'] = [{wch:22},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Monthly Summary');
+  setProgress(85);
+
+  const scope = document.getElementById('exp-scope').value;
+  const fname = scope === 'all'
+    ? `IRS_Survey_Tracker_Full_${new Date().toISOString().slice(0,10)}.xlsx`
+    : `IRS_Survey_Report_${getMonthLabel().replace(' ','_')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+}
+
+async function exportPDF(data) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const monthLabel = getMonthLabel();
+  setProgress(40);
+
+  // ── Header block ──
+  doc.setFillColor(10, 61, 98);
+  doc.rect(0, 0, 297, 22, 'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica','bold');
+  doc.text('Indian Register of Shipping', 14, 9);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text('Survey Allocation Report — SEA Region', 14, 16);
+  doc.setFontSize(9);
+  doc.text(`Period: ${monthLabel}`, 200, 9);
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 200, 15);
+  doc.text(`Total Records: ${data.length}`, 200, 21);
+
+  setProgress(60);
+
+  // ── Summary row ──
+  const surveyors = ['WYC','CHMA','AP (Self)'];
+  let yPos = 30;
+  doc.setTextColor(40,40,40);
+  doc.setFontSize(8);
+  doc.setFont('helvetica','bold');
+
+  const sumCols = ['Surveyor', 'Assigned', 'Confirmed', 'Pending', 'Completed'];
+  const sumData = surveyors.map(sv => {
+    const sub = data.filter(s => s.surveyor === sv);
+    return [sv, sub.length, sub.filter(s=>s.status==='Confirmed').length, sub.filter(s=>s.status==='Pending').length, sub.filter(s=>s.status==='Completed').length];
+  });
+
+  doc.autoTable({
+    startY: yPos,
+    head: [sumCols],
+    body: sumData,
+    theme: 'grid',
+    headStyles: { fillColor: [0,100,160], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8 },
+    columnStyles: { 0: {fontStyle:'bold'} },
+    margin: { left: 14, right: 14 },
+    tableWidth: 100,
+  });
+
+  setProgress(75);
+
+  // ── Main data table ──
+  const tableHead = [['Vessel Name','Type','IMO','ETA','Port','Survey Type','Surveyor','Status','Notes']];
+  const tableBody = data.map(s => [
+    s.vesselName, s.vesselType || '', s.imoNumber || '',
+    formatDate(s.eta), s.port || '', s.surveyType || '',
+    s.surveyor, s.status, (s.notes || '').substring(0,40)
+  ]);
+
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 8,
+    head: tableHead,
+    body: tableBody,
+    theme: 'striped',
+    headStyles: { fillColor: [10, 61, 98], textColor: 255, fontSize: 7, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 7 },
+    alternateRowStyles: { fillColor: [240, 247, 255] },
+    columnStyles: {
+      0: {cellWidth: 40, fontStyle:'bold'},
+      1: {cellWidth: 22},
+      2: {cellWidth: 18},
+      3: {cellWidth: 22},
+      4: {cellWidth: 22},
+      5: {cellWidth: 35},
+      6: {cellWidth: 16},
+      7: {cellWidth: 20},
+      8: {cellWidth: 'auto'},
+    },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (d) => {
+      // Footer
+      doc.setFontSize(7);
+      doc.setTextColor(150,150,150);
+      doc.text(`IRS Survey Tracker · ${monthLabel} · Page ${d.pageNumber}`, 14, doc.internal.pageSize.height - 5);
+    }
+  });
+
+  setProgress(90);
+  const scope = document.getElementById('exp-scope').value;
+  const fname = scope === 'all'
+    ? `IRS_Survey_Tracker_Full_${new Date().toISOString().slice(0,10)}.pdf`
+    : `IRS_Survey_Report_${getMonthLabel().replace(' ','_')}.pdf`;
+  doc.save(fname);
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
+});
+
+// Init
+renderTable();
+</script>
+</body>
+</html>
